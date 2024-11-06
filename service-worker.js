@@ -1,6 +1,6 @@
-importScripts("./global-shim.js", "./babel.js");
+importScripts("./global-shim.js", "./dist/babel.js");
 
-const version = "v1";
+const version = "v2";
 const timestamp = new Date();
 const addResourcesToCache = async resources => {
     const cache = await caches.open(version);
@@ -83,10 +83,13 @@ function router(request) {
             request
         );
     }
-
-    return cacheFirst({
-        request
-    });
+    const params = url.searchParams;
+    if (params.has("t")) {
+        return cacheFirst({
+            request
+        });
+    }
+    return fetch(request);
 }
 const deleteCache = async key => {
     await caches.delete(key);

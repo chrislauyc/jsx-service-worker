@@ -1,14 +1,14 @@
-// cp ~/storage/downloads/code/bundler/* . && npm run webpack && cp index.js ~/storage/downloads/code/bundler/index.js
-
 const path = require("path");
-//const webpack = require("webpack");
+const webpackPath = path.resolve(__dirname, "webpack");
 module.exports = {
-    //mode: "development",
     mode: "production",
-    entry: "./index.ts",
+    entry: {
+        "babel": path.resolve(webpackPath, "./babel.js"),
+        "react": path.resolve(webpackPath, "./react.js"),
+    },
     output: {
-        path: path.resolve(__dirname, "."),
-        filename: "index.js"
+        path: path.resolve(__dirname, "./dist"),
+        filename: "[name].js"
         // library: {
         //     // do not specify a `name` here
         //     type: "module"
@@ -27,7 +27,6 @@ module.exports = {
         //     )
         // }
     },
-
     module: {
         rules: [
             {
@@ -37,14 +36,4 @@ module.exports = {
             }
         ]
     }
-    // plugins: [
-    //     new webpack.ProvidePlugin({
-    //         process: {
-    //             env: {}
-    //         }
-    //     })
-    // ]
-    // experiments: {
-    //     outputModule: true
-    // }
 };
