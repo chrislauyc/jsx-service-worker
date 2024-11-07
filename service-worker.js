@@ -1,35 +1,32 @@
 importScripts("./global-shim.js", "./dist/babel.js");
 
-const version = "v2";
+const version = "v1";
 const timestamp = new Date();
 const addResourcesToCache = async resources => {
     const cache = await caches.open(version);
     await cache.addAll(resources);
 };
 
-const putInCache = async (request, response) => {
+const putInCache = async (url, code) => {
     const cache = await caches.open(version);
-    await cache.put(request, response);
+    await cache.put(url, code);
 };
 
 const cacheFirst = async ({ request }) => {
     // First try to get the resource from the cache
-    const responseFromCache = await caches.match(request);
-    if (responseFromCache) {
-        return responseFromCache;
+    const code = await caches.match(request.url);
+    if (code) {
+        return getJsResponse(code);
     }
-
     // Next try to get the resource from the network
     try {
         const responseFromNetwork = await fetch(request.clone());
-        if (isJavaScript(responseFromNetwork)) {
-            const { status, headers } = responseFromNetwork;
-            const text = await responseFromNetwork.text();
-            const transpiled = runTranspilation(text);
-            putInCache(request, new Response(transpiled, { status, headers }));
-            return new Response(transpiled, { status, headers });
-        }
-        return responseFromNetwork;
+        const { response, code } = await processResponse(responseFromNetwork);
+        putInCache(
+            request.url,
+            `// Cached by Service Worker ${version}\n${code}`
+        );
+        return response;
     } catch (error) {
         // when even the fallback response is not available,
         // there is nothing we can do, but we must always
@@ -48,16 +45,32 @@ self.addEventListener("install", event => {
 self.addEventListener("fetch", event => {
     event.respondWith(router(event.request));
 });
-function isJavaScript(responseFromNetwork) {
-    const type = responseFromNetwork.headers.get("content-type");
-    return (
-        type.includes("text/javascript") ||
-        type.includes("application/javascript")
-    );
+
+async function processResponse(res) {
+    const clone = res.clone();
+    const { type, url, redirected, status, ok, statusText, headers } = clone;
+    const jsxCode = await clone.text();
+    const jsCode = `// Transpiled by service worker ${version}\n${globalThis.transpile(
+        jsxCode
+    )}`;
+
+    return {
+        response: new Response(jsCode, {
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Content-Type": "application/javascript"
+            }
+        }),
+        code: jsCode
+    };
 }
-function runTranspilation(code) {
-    const transpiled = globalThis.transpile(code);
-    return transpiled;
+function getJsResponse(code) {
+    new Response(code, {
+        headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/javascript"
+        }
+    });
 }
 
 const serviceWorkerRouteMatcher = /^\/(sw$|sw\/)/;
@@ -67,14 +80,16 @@ function serviceWorkerRoute(path, request) {
     const params = url.searchParams;
     if (params.has("version")) {
         return Response.json({
-            version
+            version,
+            c: {}
         });
     }
+
     return Response.json({
         message: "Service worker is working."
     });
 }
-function router(request) {
+async function router(request) {
     const url = new URL(request.url);
 
     if (serviceWorkerRouteMatcher.test(url.pathname)) {
@@ -83,8 +98,16 @@ function router(request) {
             request
         );
     }
+
     const params = url.searchParams;
-    if (params.has("t")) {
+    if (url.pathname.endsWith(".jsx") || params.has("x")) {
+        const res = await fetch(request);
+        // return new Response(await res.text(), {
+        //     headers: {
+        //         "Access-Control-Allow-Origin": "*",
+        //         "Content-Type": "application/javascript"
+        //     }
+        // });
         return cacheFirst({
             request
         });
@@ -104,5 +127,5 @@ const deleteOldCaches = async () => {
 
 self.addEventListener("activate", event => {
     event.waitUntil(deleteOldCaches());
-    event.waitUntil(clients.claim());
+    //event.waitUntil(clients.claim());
 });

@@ -1,5 +1,5 @@
 const serviceWorkerName = "service-worker.js";
-const version = "v2";
+const version = "v1";
 
 export async function autoUpdate() {
     const swVersion = await getVersion();
@@ -17,7 +17,11 @@ export async function getVersion() {
     }
     return fetch("/sw?version")
         .then(res => res.json())
-        .then(j => j.version);
+
+        .then(j => {
+            console.log(j);
+            return j.version;
+        });
 }
 
 async function registerServiceWorker() {

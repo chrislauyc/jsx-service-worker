@@ -1,8 +1,19 @@
 import { autoUpdate, getVersion } from "./sw-manager.js";
-console.log("hello");
+
+// autoUpdate()
+//     .then(() => import("./test.js"))
+//     .then(({ Test }) => {})
+//     .catch(e => console.error(e));
+
+fetch("./test2.jsx")
+    .then(r => {
+        console.log(r);
+        console.log([...r.headers.entries()]);
+        return r.text();
+    })
+    .then(t => console.log(t))
+    .then(() => import("./test2.jsx"))
+    .catch(e => console.error(e));
 getVersion()
     .then(v => console.log(v))
     .catch(e => console.error(e));
-autoUpdate().then(()=>
-  import("./test.js?t")
-).catch(e => console.error(e));
