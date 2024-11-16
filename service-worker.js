@@ -1,7 +1,8 @@
-importScripts("./global-shim.js", "./dist/babel.js");
-
 const version = "v1";
 const timestamp = new Date();
+let lastInstall = { toString: () => "none" };
+let lastActivate = { toString: () => "none" };
+
 const addResourcesToCache = async resources => {
     const cache = await caches.open(version);
     await cache.addAll(resources);
@@ -21,12 +22,12 @@ const cacheFirst = async ({ request }) => {
     // Next try to get the resource from the network
     try {
         const responseFromNetwork = await fetch(request.clone());
-        const { response, code } = await processResponse(responseFromNetwork);
+        const code = transpileJSX(await responseFromNetwork.clone().text());
         putInCache(
             request.url,
             `// Cached by Service Worker ${version}\n${code}`
         );
-        return response;
+        return getJsResponse(code);
     } catch (error) {
         // when even the fallback response is not available,
         // there is nothing we can do, but we must always
@@ -39,35 +40,24 @@ const cacheFirst = async ({ request }) => {
 };
 
 self.addEventListener("install", event => {
+    lastInstall = new Date();
+    importScripts("./global-shim.js", "./dist/babel.js");
     event.waitUntil(addResourcesToCache(["./"]));
 });
 
 self.addEventListener("fetch", event => {
     event.respondWith(router(event.request));
 });
-
-async function processResponse(res) {
-    const clone = res.clone();
-    const { type, url, redirected, status, ok, statusText, headers } = clone;
-    const jsxCode = await clone.text();
+function transpileJSX(jsx) {
     const jsCode = `// Transpiled by service worker ${version}\n${globalThis.transpile(
-        jsxCode
+        jsx
     )}`;
-
-    return {
-        response: new Response(jsCode, {
-            headers: {
-                "Access-Control-Allow-Origin": "*",
-                "Content-Type": "application/javascript"
-            }
-        }),
-        code: jsCode
-    };
+    return jsCode;
 }
+
 function getJsResponse(code) {
     new Response(code, {
         headers: {
-            "Access-Control-Allow-Origin": "*",
             "Content-Type": "application/javascript"
         }
     });
@@ -78,10 +68,12 @@ const serviceWorkerRouteMatcher = /^\/(sw$|sw\/)/;
 function serviceWorkerRoute(path, request) {
     const url = new URL(request.url);
     const params = url.searchParams;
-    if (params.has("version")) {
+    if (params.has("version") || params.has("info")) {
         return Response.json({
             version,
-            c: {}
+            lastScriptRun: timestamp.toString(),
+            lastInstall: lastInstall.toString(),
+            lastActivate: lastActivate.toString()
         });
     }
 
@@ -100,7 +92,7 @@ async function router(request) {
     }
 
     const params = url.searchParams;
-    if (url.pathname.endsWith(".jsx") || params.has("x")) {
+    if (url.pathname.endsWith(".jsx")) {
         const res = await fetch(request);
         // return new Response(await res.text(), {
         //     headers: {
@@ -126,6 +118,7 @@ const deleteOldCaches = async () => {
 };
 
 self.addEventListener("activate", event => {
+    lastActivate = new Date();
     event.waitUntil(deleteOldCaches());
     //event.waitUntil(clients.claim());
 });
